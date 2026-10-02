@@ -1,0 +1,35 @@
+[package]
+name = "receiptbox"
+version = "0.1.0"
+description = "Private, local-first financial document management"
+authors = ["ReceiptBox contributors"]
+edition = "2021"
+
+[lib]
+name = "receiptbox_lib"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "receiptbox"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+chrono = { version = "0.4", features = ["serde"] }
+hex = "0.4"
+rusqlite = { version = "0.37", features = ["bundled", "chrono"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dev-dependencies]
+tempfile = "3"

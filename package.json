@@ -1,0 +1,15 @@
+{
+  "name": "receiptbox",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "eslint src --ext ts,tsx",
+    "test": "vitest run",
+    "tauri": "tauri"
+  },
+  "dependencies": { "@tauri-apps/api": "latest", "@tauri-apps/plugin-dialog": "latest", "@vitejs/plugin-react": "latest", "vite": "latest", "typescript": "latest", "react": "latest", "react-dom": "latest", "lucide-react": "latest" },
+  "devDependencies": { "@eslint/js": "latest", "@tauri-apps/cli": "latest", "@types/react": "latest", "@types/react-dom": "latest", "eslint": "latest", "typescript-eslint": "latest", "vitest": "latest", "jsdom": "latest" }
+}

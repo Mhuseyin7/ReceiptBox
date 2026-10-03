@@ -69,6 +69,10 @@ npm install
 npm run tauri dev
 ```
 
+### Synthetic import fixture
+
+İçe aktarma akışını gerçek kişisel veri kullanmadan denemek için [test-receipt-tr.png](test-receipt-tr.png) dosyasını seçin. Bu görsel tamamen sentetiktir ve gerçek bir satın alma kaydı değildir.
+
 ### Verification
 
 ```powershell

@@ -69,8 +69,10 @@ fn initialize(conn: &Connection) -> std::result::Result<(), rusqlite::Error> {
     conn.execute_batch("PRAGMA foreign_keys=ON;
  CREATE TABLE IF NOT EXISTS documents (id TEXT PRIMARY KEY, name TEXT NOT NULL, merchant TEXT NOT NULL DEFAULT 'Unrecognized merchant', purchase_date TEXT NOT NULL DEFAULT 'Unknown date', total TEXT NOT NULL DEFAULT '—', currency TEXT NOT NULL DEFAULT '—', category TEXT NOT NULL DEFAULT 'Uncategorized', status TEXT NOT NULL DEFAULT 'Needs review', ocr_text TEXT NOT NULL DEFAULT '', content_hash TEXT NOT NULL UNIQUE, original_path TEXT NOT NULL, imported_at TEXT NOT NULL);
  CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(id UNINDEXED, name, merchant, category, ocr_text);
- CREATE TRIGGER IF NOT EXISTS documents_ai AFTER INSERT ON documents BEGIN INSERT INTO documents_fts(rowid,id,name,merchant,category,ocr_text) VALUES(new.rowid,new.id,new.name,new.merchant,new.category,new.ocr_text); END;
- CREATE TRIGGER IF NOT EXISTS documents_au AFTER UPDATE ON documents BEGIN INSERT INTO documents_fts(documents_fts,rowid,id,name,merchant,category,ocr_text) VALUES('delete',old.rowid,old.id,old.name,old.merchant,old.category,old.ocr_text); INSERT INTO documents_fts(rowid,id,name,merchant,category,ocr_text) VALUES(new.rowid,new.id,new.name,new.merchant,new.category,new.ocr_text); END;
+ DROP TRIGGER IF EXISTS documents_ai;
+ DROP TRIGGER IF EXISTS documents_au;
+ CREATE TRIGGER documents_ai AFTER INSERT ON documents BEGIN INSERT INTO documents_fts(rowid,id,name,merchant,category,ocr_text) VALUES(new.rowid,new.id,new.name,new.merchant,new.category,new.ocr_text); END;
+ CREATE TRIGGER documents_au AFTER UPDATE ON documents BEGIN DELETE FROM documents_fts WHERE rowid=old.rowid; INSERT INTO documents_fts(rowid,id,name,merchant,category,ocr_text) VALUES(new.rowid,new.id,new.name,new.merchant,new.category,new.ocr_text); END;
  CREATE TABLE IF NOT EXISTS audit_events (id TEXT PRIMARY KEY, document_id TEXT, event TEXT NOT NULL, created_at TEXT NOT NULL);")
 }
 fn magic(path: &Path) -> Result<()> {
@@ -347,6 +349,29 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 1)
+    }
+    #[test]
+    fn updating_a_document_refreshes_its_search_index() {
+        let c = Connection::open_in_memory().unwrap();
+        initialize(&c).unwrap();
+        c.execute("INSERT INTO documents(id,name,merchant,content_hash,original_path,imported_at) VALUES('1','receipt.pdf','Old Shop','hash','x','now')",[]).unwrap();
+        c.execute("UPDATE documents SET merchant='New Shop' WHERE id='1'", [])
+            .unwrap();
+        let old_count: i64 = c
+            .query_row(
+                "SELECT count(*) FROM documents_fts WHERE documents_fts MATCH 'Old*'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let new_count: i64 = c
+            .query_row(
+                "SELECT count(*) FROM documents_fts WHERE documents_fts MATCH 'New*'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!((old_count, new_count), (0, 1));
     }
     #[test]
     fn csv_cells_cannot_be_formulas() {

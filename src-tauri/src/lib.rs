@@ -139,6 +139,30 @@ fn query_docs(conn: &Connection, sql: &str, term: Option<&str>) -> Result<Vec<Do
     Ok(out)
 }
 const DOC_COLUMNS:&str="id,name,merchant,purchase_date,total,currency,category,status,ocr_text,content_hash,imported_at,original_path";
+fn build_fts_query(input: &str) -> Option<String> {
+    let terms: Vec<String> = input
+        .split_whitespace()
+        .map(|term| {
+            term.chars()
+                .filter(|c| c.is_alphanumeric())
+                .collect::<String>()
+        })
+        .filter(|term| !term.is_empty())
+        .filter(|term| {
+            !matches!(
+                term.to_ascii_uppercase().as_str(),
+                "AND" | "OR" | "NOT" | "NEAR"
+            )
+        })
+        .collect();
+    (!terms.is_empty()).then(|| {
+        terms
+            .iter()
+            .map(|term| format!("{term}*"))
+            .collect::<Vec<_>>()
+            .join(" AND ")
+    })
+}
 
 #[tauri::command]
 fn list_documents(state: State<'_, AppState>) -> Result<Vec<Document>> {
@@ -155,8 +179,15 @@ fn search_documents(query: String, state: State<'_, AppState>) -> Result<Vec<Doc
     if q.is_empty() {
         return list_documents(state);
     };
+    let Some(fts_query) = build_fts_query(q) else {
+        return Ok(Vec::new());
+    };
     let conn = state.db.lock().map_err(app_error)?;
-    query_docs(&conn,&format!("SELECT d.{DOC_COLUMNS} FROM documents d JOIN documents_fts f ON f.id=d.id WHERE documents_fts MATCH ? ORDER BY rank"),Some(&format!("{}*",q.replace('"',""))))
+    query_docs(
+        &conn,
+        &format!("SELECT d.{DOC_COLUMNS} FROM documents d JOIN documents_fts f ON f.id=d.id WHERE documents_fts MATCH ? ORDER BY rank"),
+        Some(&fts_query),
+    )
 }
 #[tauri::command]
 fn import_document(source_path: String, state: State<'_, AppState>) -> Result<ImportOutcome> {
@@ -260,6 +291,10 @@ fn create_backup(destination: String, state: State<'_, AppState>) -> Result<()> 
     if destination.exists() {
         return Err(ReceiptError::Other("backup target already exists".into()));
     };
+    let conn = state.db.lock().map_err(app_error)?;
+    conn.execute_batch("PRAGMA wal_checkpoint(FULL);")
+        .map_err(app_error)?;
+    drop(conn);
     fs::create_dir_all(&destination).map_err(app_error)?;
     fs::copy(
         state.library.join("receiptbox.sqlite3"),
@@ -377,5 +412,13 @@ mod tests {
     fn csv_cells_cannot_be_formulas() {
         assert_eq!(csv_escape("=1+1"), "\"'=1+1\"");
         assert_eq!(csv_escape("merchant"), "\"merchant\"");
+    }
+    #[test]
+    fn fts_queries_strip_operators() {
+        assert_eq!(
+            build_fts_query("market + receipt"),
+            Some("market* AND receipt*".into())
+        );
+        assert_eq!(build_fts_query("\" OR *"), None);
     }
 }
